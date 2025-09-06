@@ -8,13 +8,14 @@ interface EmailVerificationProps {
   onBack: () => void;
 }
 
+let nsent = 0;
+
 const EmailVerification: React.FC<EmailVerificationProps> = ({ email, onVerified, onBack }) => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [codeSent, setCodeSent] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [isInitialSend, setIsInitialSend] = useState(false);
 
   const sendVerificationCode = useCallback(async () => {
     setLoading(true);
@@ -29,8 +30,18 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({ email, onVerified
       setCodeSent(true);
       setResendCooldown(60); // 60 second cooldown
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to send verification code. Please try again.';
-      setMessage({ type: 'error', text: errorMessage });
+      if (error.response?.status === 429) {
+        // Rate limited - show retry countdown
+        const retryAfter = error.response?.data?.retryAfter || 60;
+        setMessage({ 
+          type: 'info', 
+          text: error.response?.data?.message || `Please wait ${retryAfter} seconds before requesting another verification code.` 
+        });
+        setResendCooldown(retryAfter);
+      } else {
+        const errorMessage = error.response?.data?.error || 'Failed to send verification code. Please try again.';
+        setMessage({ type: 'error', text: errorMessage });
+      }
     } finally {
       setLoading(false);
     }
@@ -38,11 +49,11 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({ email, onVerified
 
   useEffect(() => {
     // Auto-send verification code when component mounts (only once)
-    if (!isInitialSend) {
+    if (!codeSent) {
+      console.log("Sending verification code: ", nsent++, " codeSent: ", codeSent);
       sendVerificationCode();
-      setIsInitialSend(true);
     }
-  }, [sendVerificationCode, isInitialSend]);
+  }, []);
 
   useEffect(() => {
     if (resendCooldown > 0) {

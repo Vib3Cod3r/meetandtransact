@@ -79,20 +79,31 @@ export function formatDateOnly(date: string | Date): string {
 export function localDateTimeToUTC(localDateTime: string): string {
   if (!localDateTime) return '';
   
-  // Create a date object in UK timezone
-  const date = new Date(localDateTime + '+01:00'); // Assume BST for now, could be improved
+  // Create a date object and treat it as UK time
+  const date = new Date(localDateTime+'+01:00');
   
-  // Check if we're in BST or GMT
-  const now = new Date();
-  const isBST = now.getTimezoneOffset() < 0; // Simple check, could be more sophisticated
+  // Use a more direct approach: create a date that represents the UK time
+  // and then convert it to UTC by adjusting for the timezone offset
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
   
-  if (isBST) {
-    // BST is UTC+1
-    return new Date(localDateTime + '+01:00').toISOString();
-  } else {
-    // GMT is UTC+0
-    return new Date(localDateTime + '+00:00').toISOString();
-  }
+  // Create a new date in UTC that represents the same moment in UK time
+  const utcDate = new Date(Date.UTC(year, month, day, hours, minutes, 0, 0));
+  
+  // Now we need to adjust for the UK timezone offset
+  // Get the offset for this specific date
+  const testDate = new Date(year, month, day, 12, 0, 0, 0); // Noon on the same date
+  const utcTest = new Date(testDate.getTime() - (testDate.getTimezoneOffset() * 60000));
+  const ukTest = new Date(utcTest.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+  const offset = (ukTest.getTime() - utcTest.getTime()) / (1000 * 60);
+  
+  // Apply the offset
+  const adjustedDate = new Date(utcDate.getTime() - (offset * 60 * 1000));
+  
+  return adjustedDate.toISOString();
 }
 
 /**
@@ -105,14 +116,24 @@ export function utcToLocalDateTime(utcDate: string): string {
   
   const date = new Date(utcDate);
   
-  // Convert to UK time and format for datetime-local input
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+  // Use toLocaleString to get the UK time components
+  const ukTimeString = date.toLocaleString('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
   
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  // Parse the UK time string to get individual components
+  const [datePart, timePart] = ukTimeString.split(', ');
+  const [year, month, day] = datePart.split('-');
+  const [hour, minute] = timePart.split(':');
+  
+  return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
 /**

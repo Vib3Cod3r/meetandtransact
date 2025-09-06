@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import EmailVerification from './EmailVerification';
 import RescheduleWarningModal from './RescheduleWarningModal';
+import BookingSuccessModal from './BookingSuccessModal';
 import { formatDateTimeForUK } from '../utils/timezone';
 import './BookingPage.css';
 
@@ -22,6 +24,7 @@ interface BookingForm {
 }
 
 const BookingPage: React.FC = () => {
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +34,8 @@ const BookingPage: React.FC = () => {
   const [showRescheduleWarning, setShowRescheduleWarning] = useState(false);
   const [existingAppointment, setExistingAppointment] = useState<{ id: number; place: string; datetime: string } | null>(null);
   const [pendingAppointmentId, setPendingAppointmentId] = useState<string>('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successAppointmentDetails, setSuccessAppointmentDetails] = useState<{ place: string; datetime: string } | null>(null);
   
   const [formData, setFormData] = useState<BookingForm>({
     name: '',
@@ -48,7 +53,15 @@ const BookingPage: React.FC = () => {
   const fetchAppointments = async () => {
     try {
       const response = await axios.get('/api/appointments');
-      setAppointments(response.data);
+      const now = new Date();
+      
+      // Filter out past appointments
+      const futureAppointments = response.data.filter((appointment: Appointment) => {
+        const appointmentDate = new Date(appointment.datetime);
+        return appointmentDate > now;
+      });
+      
+      setAppointments(futureAppointments);
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to load appointments. Please try again.' });
     } finally {
@@ -118,10 +131,16 @@ const BookingPage: React.FC = () => {
 
     try {
       await axios.post('/api/appointments/book', formData);
-      setMessage({ 
-        type: 'success', 
-        text: 'Appointment booked successfully! You will receive a confirmation email shortly.' 
-      });
+      
+      // Get appointment details for success modal
+      const selectedAppointment = appointments.find(apt => apt.id.toString() === formData.appointmentId);
+      if (selectedAppointment) {
+        setSuccessAppointmentDetails({
+          place: selectedAppointment.place,
+          datetime: formatDateTime(selectedAppointment.datetime)
+        });
+        setShowSuccessModal(true);
+      }
       
       // Reset form
       setFormData({
@@ -170,10 +189,45 @@ const BookingPage: React.FC = () => {
     }
   };
 
-  const handleEmailVerified = () => {
+  const handleEmailVerified = async () => {
     setShowVerification(false);
+    
     // Retry the booking after email verification
-    handleSubmit(new Event('submit') as any);
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      await axios.post('/api/appointments/book', formData);
+      
+      // Get appointment details for success modal
+      const selectedAppointment = appointments.find(apt => apt.id.toString() === formData.appointmentId);
+      if (selectedAppointment) {
+        setSuccessAppointmentDetails({
+          place: selectedAppointment.place,
+          datetime: formatDateTime(selectedAppointment.datetime)
+        });
+        setShowSuccessModal(true);
+      }
+      
+      // Reset form
+      setFormData({
+        name: '',
+        email: '',
+        homeAddress: '',
+        phoneNumber: '',
+        appointmentId: '',
+        eligibilityConfirmed: false
+      });
+      
+      // Refresh appointments
+      fetchAppointments();
+    } catch (error: any) {
+      const errorData = error.response?.data;
+      const errorMessage = errorData?.error || 'Failed to book appointment. Please try again.';
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleBackToForm = () => {
@@ -195,10 +249,15 @@ const BookingPage: React.FC = () => {
         appointmentId: pendingAppointmentId
       });
       
-      setMessage({ 
-        type: 'success', 
-        text: 'Appointment rescheduled successfully! You will receive a confirmation email shortly.' 
-      });
+      // Get appointment details for success modal
+      const selectedAppointment = appointments.find(apt => apt.id.toString() === pendingAppointmentId);
+      if (selectedAppointment) {
+        setSuccessAppointmentDetails({
+          place: selectedAppointment.place,
+          datetime: formatDateTime(selectedAppointment.datetime)
+        });
+        setShowSuccessModal(true);
+      }
       
       // Reset form
       setFormData({
@@ -231,6 +290,12 @@ const BookingPage: React.FC = () => {
       type: 'info', 
       text: 'You can keep your current appointment or select a different time to reschedule.' 
     });
+  };
+
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    setSuccessAppointmentDetails(null);
+    navigate('/');
   };
 
   const formatDateTime = (datetime: string) => {
@@ -415,6 +480,15 @@ const BookingPage: React.FC = () => {
           newAppointment={appointments.find(apt => apt.id.toString() === pendingAppointmentId) || { id: 0, place: '', datetime: '' }}
           onConfirmReschedule={handleConfirmReschedule}
           onCancel={handleCancelReschedule}
+        />
+      )}
+
+      {/* Booking Success Modal */}
+      {successAppointmentDetails && (
+        <BookingSuccessModal
+          isOpen={showSuccessModal}
+          onClose={handleSuccessModalClose}
+          appointmentDetails={successAppointmentDetails}
         />
       )}
     </div>

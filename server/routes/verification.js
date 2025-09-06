@@ -21,7 +21,7 @@ function sendVerificationEmail(email, code) {
   });
 
   const mailOptions = {
-    from: process.env.FROM_EMAIL,
+    from: "Queen Street Gardens <" + process.env.FROM_EMAIL + ">",
     replyTo: process.env.REPLY_TO_EMAIL || process.env.FROM_EMAIL,
     to: email,
     subject: 'Queen Street Gardens - Email Verification Code',
@@ -48,6 +48,8 @@ function sendVerificationEmail(email, code) {
 }
 
 // Request verification code
+const last_request_time = {}; // email -> timestamp
+
 router.post('/request-code', async (req, res) => {
   const { email } = req.body;
 
@@ -62,47 +64,95 @@ router.post('/request-code', async (req, res) => {
   }
 
   try {
-    // Generate verification code
-    const code = generateVerificationCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
-
-    // Delete any existing unverified codes for this email
-    db.run(
-      'DELETE FROM email_verifications WHERE email = ? AND verified = FALSE',
+    // Check for recent verification codes (rate limiting)
+    db.get(
+      'SELECT created_at FROM email_verifications WHERE email = ? AND verified = FALSE AND expires_at > datetime("now", "utc") ORDER BY created_at DESC LIMIT 1',
       [email],
-      (err) => {
+      (err, row) => {
         if (err) {
-          console.error('Error deleting old codes:', err);
-        }
-      }
-    );
-
-    // Insert new verification code
-    db.run(
-      'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)',
-      [email, code, expiresAt.toISOString()],
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to generate verification code' });
+          return res.status(500).json({ error: 'Database error' });
         }
 
-        // Send verification email
-        sendVerificationEmail(email, code)
-          .then(() => {
-            res.json({ 
-              message: 'Verification code sent to your email address',
-              email: email
-            });
-          })
-          .catch((emailError) => {
-            console.error('Error sending email:', emailError);
-            // Still return success to user, but log the error
-            res.json({ 
-              message: 'Verification code generated. Please check your email.',
-              email: email,
-              note: 'If you don\'t receive the email, please check your spam folder.'
-            });
+
+        const now = new Date().getTime();
+
+        const oneMinute = 60 * 1000; // 1 minute in milliseconds
+
+        console.log("Last request time: ", last_request_time[email], " now: ", now);  
+
+        if (last_request_time[email] && (now - last_request_time[email]) < oneMinute) {
+          console.log("Received two near simultaneous requests")
+          return res.status(429).json({ 
+            error: 'Please wait before requesting another verification code',
+            retryAfter: oneMinute - (now - last_request_time[email]),
+            message: `Please wait ${60} seconds before requesting another verification code.`
           });
+        }
+        last_request_time[email] = now;
+
+        // If there's an unexpired code, check if it was sent less than 1 minute ago
+        if (row) {
+          console.log("Row: ", row);
+          const now = new Date().getTime();
+          const codeCreatedAt = new Date(row.created_at+"Z").getTime();
+          const timeDiff = now - codeCreatedAt;
+
+          console.log("Time diff: ", timeDiff, " oneMinute: ", oneMinute, "now: ", now, "codeCreatedAt: ", codeCreatedAt, "row created at: ", row.created_at);
+
+          if (timeDiff < oneMinute) {
+            const remainingTime = Math.ceil((oneMinute - timeDiff) / 1000);
+            return res.status(429).json({ 
+              error: 'Please wait before requesting another verification code',
+              retryAfter: remainingTime,
+              message: `Please wait ${remainingTime} seconds before requesting another verification code.`
+            });
+          }
+         
+        }
+
+        // Generate verification code
+        const code = generateVerificationCode();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        // Delete any existing unverified codes for this email
+        db.run(
+          'DELETE FROM email_verifications WHERE email = ? AND verified = FALSE',
+          [email],
+          (err) => {
+            if (err) {
+              console.error('Error deleting old codes:', err);
+            }
+          }
+        );
+
+        // Insert new verification code
+        db.run(
+          'INSERT INTO email_verifications (email, code, expires_at) VALUES (?, ?, ?)',
+          [email, code, expiresAt.toISOString()],
+          function(err) {
+            if (err) {
+              return res.status(500).json({ error: 'Failed to generate verification code' });
+            }
+
+            // Send verification email
+            sendVerificationEmail(email, code)
+              .then(() => {
+                res.json({ 
+                  message: 'Verification code sent to your email address',
+                  email: email
+                });
+              })
+              .catch((emailError) => {
+                console.error('Error sending email:', emailError);
+                // Still return success to user, but log the error
+                res.json({ 
+                  message: 'Verification code generated. Please check your email.',
+                  email: email,
+                  note: 'If you don\'t receive the email, please check your spam folder.'
+                });
+              });
+          }
+        );
       }
     );
   } catch (error) {

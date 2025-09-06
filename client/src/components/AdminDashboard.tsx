@@ -121,7 +121,7 @@ const AdminDashboard: React.FC = () => {
       // Convert local datetime to UTC for API
       const formData = {
         ...appointmentForm,
-        datetime: localDateTimeToUTC(appointmentForm.datetime)
+        //datetime: localDateTimeToUTC(appointmentForm.datetime)  // do not convert to UTC for admin
       };
       
       if (editingAppointment) {
@@ -143,6 +143,15 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleEditAppointment = (appointment: Appointment) => {
+    // Check if appointment has attendees
+    if (appointment.current_bookings > 0) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Cannot edit appointments with existing attendees. You can only increase the maximum number of attendees or cancel the appointment.' 
+      });
+      return;
+    }
+    
     setEditingAppointment(appointment);
     setAppointmentForm({
       place: appointment.place,
@@ -202,6 +211,16 @@ const AdminDashboard: React.FC = () => {
   const handleCloseKeyManagement = () => {
     setShowKeyManagement(false);
     setSelectedUserForKey(null);
+  };
+
+  const handleIncreaseMaxBookings = (appointment: Appointment) => {
+    setEditingAppointment(appointment);
+    setAppointmentForm({
+      place: appointment.place,
+      datetime: utcToLocalDateTime(appointment.datetime),
+      maxBookings: appointment.max_bookings
+    });
+    setShowAppointmentForm(true);
   };
 
   if (loading) {
@@ -264,7 +283,20 @@ const AdminDashboard: React.FC = () => {
 
             {showAppointmentForm && (
               <div className="card">
-                <h3>{editingAppointment ? 'Edit Appointment' : 'Add New Appointment'}</h3>
+                <h3>
+                  {editingAppointment 
+                    ? (editingAppointment.current_bookings > 0 
+                        ? 'Increase Maximum Attendees' 
+                        : 'Edit Appointment')
+                    : 'Add New Appointment'
+                  }
+                </h3>
+                {editingAppointment && editingAppointment.current_bookings > 0 && (
+                  <div className="alert alert-warning">
+                    <strong>Note:</strong> This appointment has {editingAppointment.current_bookings} attendee(s). 
+                    You can only increase the maximum number of attendees. Other changes require cancelling and creating a new appointment.
+                  </div>
+                )}
                 <form onSubmit={handleAppointmentSubmit} className="appointment-form">
                   <div className="form-group">
                     <label htmlFor="place" className="form-label">Location *</label>
@@ -276,6 +308,7 @@ const AdminDashboard: React.FC = () => {
                       className="form-input"
                       placeholder="e.g., Queen Street Gardens Main Gate"
                       required
+                      disabled={editingAppointment ? editingAppointment.current_bookings > 0 : false}
                     />
                   </div>
 
@@ -288,6 +321,7 @@ const AdminDashboard: React.FC = () => {
                       onChange={(e) => setAppointmentForm(prev => ({ ...prev, datetime: e.target.value }))}
                       className="form-input"
                       required
+                      disabled={editingAppointment ? editingAppointment.current_bookings > 0 : false}
                     />
                   </div>
 
@@ -299,13 +333,23 @@ const AdminDashboard: React.FC = () => {
                       value={appointmentForm.maxBookings}
                       onChange={(e) => setAppointmentForm(prev => ({ ...prev, maxBookings: parseInt(e.target.value) || 1 }))}
                       className="form-input"
-                      min="1"
+                      min={editingAppointment && editingAppointment.current_bookings > 0 ? editingAppointment.current_bookings : 1}
                     />
+                    {editingAppointment && editingAppointment.current_bookings > 0 && (
+                      <small className="form-help">
+                        Must be at least {editingAppointment.current_bookings} (current number of attendees)
+                      </small>
+                    )}
                   </div>
 
                   <div className="form-actions">
                     <button type="submit" className="btn btn-primary">
-                      {editingAppointment ? 'Update' : 'Create'} Appointment
+                      {editingAppointment 
+                        ? (editingAppointment.current_bookings > 0 
+                            ? 'Increase Maximum Attendees' 
+                            : 'Update Appointment')
+                        : 'Create Appointment'
+                      }
                     </button>
                     <button
                       type="button"
@@ -359,15 +403,27 @@ const AdminDashboard: React.FC = () => {
                     <div className="appointment-actions">
                       {appointment.status !== 'cancelled' && (
                         <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditAppointment(appointment);
-                            }}
-                            className="btn btn-secondary btn-sm"
-                          >
-                            Edit
-                          </button>
+                          {appointment.current_bookings === 0 ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditAppointment(appointment);
+                              }}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleIncreaseMaxBookings(appointment);
+                              }}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              Increase Max
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

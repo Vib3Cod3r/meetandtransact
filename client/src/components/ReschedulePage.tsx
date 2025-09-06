@@ -84,7 +84,15 @@ const ReschedulePage: React.FC = () => {
   const fetchAppointments = async () => {
     try {
       const response = await axios.get('/api/appointments');
-      setAppointments(response.data);
+      const now = new Date();
+      
+      // Filter out past appointments
+      const futureAppointments = response.data.filter((appointment: Appointment) => {
+        const appointmentDate = new Date(appointment.datetime);
+        return appointmentDate > now;
+      });
+      
+      setAppointments(futureAppointments);
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to load appointments. Please try again.' });
     } finally {

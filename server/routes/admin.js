@@ -142,6 +142,7 @@ router.get('/appointments/:id', verifyAdmin, (req, res) => {
            u.email,
            u.home_address,
            u.phone_number,
+           u.key_serial_number,
            b.booking_date
     FROM appointments a
     LEFT JOIN bookings b ON a.id = b.appointment_id
@@ -174,6 +175,7 @@ router.get('/appointments/:id', verifyAdmin, (req, res) => {
         email: row.email,
         home_address: row.home_address,
         phone_number: row.phone_number,
+        key_serial_number: row.key_serial_number,
         booking_date: fromUTC(row.booking_date)
       }))
     };
@@ -222,20 +224,62 @@ router.put('/appointments/:id', verifyAdmin, (req, res) => {
     return res.status(400).json({ error: 'Place and datetime are required' });
   }
   
-  // Convert UK time to UTC for storage
-  const utcDateTime = localDateTimeToUTC(datetime);
-  
-  db.run(
-    'UPDATE appointments SET place = ?, datetime = ?, max_bookings = ? WHERE id = ?',
-    [place, utcDateTime, maxBookings || 1, id],
-    function(err) {
+  // First check if appointment has attendees
+  db.get(
+    'SELECT COUNT(b.id) as current_bookings FROM appointments a LEFT JOIN bookings b ON a.id = b.appointment_id WHERE a.id = ? GROUP BY a.id',
+    [id],
+    (err, row) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      if (this.changes === 0) {
+      
+      if (!row) {
         return res.status(404).json({ error: 'Appointment not found' });
       }
-      res.json({ message: 'Appointment updated successfully' });
+      
+      const currentBookings = row.current_bookings || 0;
+      const newMaxBookings = maxBookings || 1;
+      
+      // If appointment has attendees, only allow increasing max_bookings
+      if (currentBookings > 0) {
+        if (newMaxBookings < currentBookings) {
+          return res.status(400).json({ 
+            error: `Cannot reduce maximum bookings below current number of attendees (${currentBookings}). You can only increase the maximum or cancel the appointment.` 
+          });
+        }
+        
+        // For appointments with attendees, only update max_bookings
+        db.run(
+          'UPDATE appointments SET max_bookings = ? WHERE id = ?',
+          [newMaxBookings, id],
+          function(err) {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            if (this.changes === 0) {
+              return res.status(404).json({ error: 'Appointment not found' });
+            }
+            res.json({ message: 'Maximum attendees increased successfully' });
+          }
+        );
+      } else {
+        // For appointments without attendees, allow full editing
+        const utcDateTime = localDateTimeToUTC(datetime);
+        
+        db.run(
+          'UPDATE appointments SET place = ?, datetime = ?, max_bookings = ? WHERE id = ?',
+          [place, utcDateTime, newMaxBookings, id],
+          function(err) {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            if (this.changes === 0) {
+              return res.status(404).json({ error: 'Appointment not found' });
+            }
+            res.json({ message: 'Appointment updated successfully' });
+          }
+        );
+      }
     }
   );
 });
