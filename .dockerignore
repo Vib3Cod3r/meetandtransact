@@ -1,0 +1,11 @@
+node_modules
+client/node_modules
+client/build
+.env
+*.log
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+

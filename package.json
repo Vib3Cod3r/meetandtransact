@@ -1,0 +1,37 @@
+{
+  "name": "queen-street-gardens-appointments",
+  "version": "1.0.0",
+  "description": "Appointment booking system for Queen Street Gardens key pickups",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "nodemon server/index.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd client && npm install",
+    "setup": "node server/setup.js",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "moment-timezone": "^0.6.0",
+    "nodemailer": "^6.9.7",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "appointment",
+    "booking",
+    "gardens",
+    "edinburgh"
+  ],
+  "author": "Queen Street Gardens",
+  "license": "MIT"
+}
