@@ -40,9 +40,12 @@ const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
     setMessage(null);
 
     try {
+      const token = localStorage.getItem('adminToken');
+      const headers = { Authorization: `Bearer ${token}` };
+      
       const response = await axios.post(`/api/admin/users/${user.id}/issue-key`, {
         keySerialNumber: keySerialNumber.trim()
-      });
+      }, { headers });
       
       setMessage({ type: 'success', text: response.data.message });
       onKeyIssued(keySerialNumber.trim());
@@ -64,7 +67,10 @@ const KeyManagementModal: React.FC<KeyManagementModalProps> = ({
     setMessage(null);
 
     try {
-      const response = await axios.post(`/api/admin/users/${user.id}/revoke-key`);
+      const token = localStorage.getItem('adminToken');
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const response = await axios.post(`/api/admin/users/${user.id}/revoke-key`, {}, { headers });
       
       setMessage({ type: 'success', text: response.data.message });
       onKeyRevoked();

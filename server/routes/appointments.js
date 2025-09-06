@@ -8,9 +8,14 @@ const { toUTC, fromUTC, formatForLocale, localDateTimeToUTC, utcToLocalDateTime 
 router.get('/', (req, res) => {
   const query = `
     SELECT a.*, 
-           (a.max_bookings - a.current_bookings) as available_slots
+           (a.max_bookings - COALESCE(booking_counts.current_bookings, 0)) as available_slots
     FROM appointments a 
-    WHERE a.current_bookings < a.max_bookings AND a.status = 'active'
+    LEFT JOIN (
+      SELECT appointment_id, COUNT(*) as current_bookings
+      FROM bookings
+      GROUP BY appointment_id
+    ) booking_counts ON a.id = booking_counts.appointment_id
+    WHERE COALESCE(booking_counts.current_bookings, 0) < a.max_bookings AND a.status = 'active'
     ORDER BY datetime(a.datetime) ASC
   `;
   
@@ -63,7 +68,14 @@ router.post('/book', async (req, res) => {
 
           // Check if appointment is still available
           db.get(
-            'SELECT * FROM appointments WHERE id = ? AND current_bookings < max_bookings',
+            `SELECT a.*, COALESCE(booking_counts.current_bookings, 0) as current_bookings
+             FROM appointments a
+             LEFT JOIN (
+               SELECT appointment_id, COUNT(*) as current_bookings
+               FROM bookings
+               GROUP BY appointment_id
+             ) booking_counts ON a.id = booking_counts.appointment_id
+             WHERE a.id = ? AND COALESCE(booking_counts.current_bookings, 0) < a.max_bookings AND a.status = 'active'`,
             [appointmentId],
             (err, appointment) => {
               if (err) {
@@ -193,30 +205,18 @@ router.post('/book', async (req, res) => {
                               return res.status(500).json({ error: err.message });
                             }
 
-                            // Update appointment booking count
-                            db.run(
-                              'UPDATE appointments SET current_bookings = current_bookings + 1 WHERE id = ?',
-                              [appointmentId],
-                              (err) => {
-                                if (err) {
-                                  db.run('ROLLBACK');
-                                  return res.status(500).json({ error: err.message });
-                                }
-
-                                db.run('COMMIT', (err) => {
-                                  if (err) {
-                                    return res.status(500).json({ error: err.message });
-                                  }
-
-                                  // Log appointment history
-                                  logAppointmentHistory(userId, appointmentId, 'booked', `Booked appointment at ${appointment.place} on ${appointment.datetime}`);
-
-                                  // Send confirmation email
-                                  sendConfirmationEmail(email, name, appointment, homeAddress, phoneNumber);
-                                  res.json({ message: 'Appointment booked successfully!' });
-                                });
+                            db.run('COMMIT', (err) => {
+                              if (err) {
+                                return res.status(500).json({ error: err.message });
                               }
-                            );
+
+                              // Log appointment history
+                              logAppointmentHistory(userId, appointmentId, 'booked', `Booked appointment at ${appointment.place} on ${appointment.datetime}`);
+
+                              // Send confirmation email
+                              sendConfirmationEmail(email, name, appointment, homeAddress, phoneNumber);
+                              res.json({ message: 'Appointment booked successfully!' });
+                            });
                           }
                         );
                       }
@@ -392,7 +392,14 @@ router.post('/reschedule', async (req, res) => {
 
           // Check if appointment is still available
           db.get(
-            'SELECT * FROM appointments WHERE id = ? AND current_bookings < max_bookings AND status = "active"',
+            `SELECT a.*, COALESCE(booking_counts.current_bookings, 0) as current_bookings
+             FROM appointments a
+             LEFT JOIN (
+               SELECT appointment_id, COUNT(*) as current_bookings
+               FROM bookings
+               GROUP BY appointment_id
+             ) booking_counts ON a.id = booking_counts.appointment_id
+             WHERE a.id = ? AND COALESCE(booking_counts.current_bookings, 0) < a.max_bookings AND a.status = 'active'`,
             [appointmentId],
             (err, appointment) => {
               if (err) {
@@ -430,52 +437,28 @@ router.post('/reschedule', async (req, res) => {
                         return res.status(500).json({ error: err.message });
                       }
 
-                      // Update appointment booking counts (decrease for cancelled bookings)
+                      // Create new booking
                       db.run(
-                        'UPDATE appointments SET current_bookings = current_bookings - 1 WHERE id IN (SELECT appointment_id FROM bookings WHERE user_id = ?)',
-                        [user.id],
+                        'INSERT INTO bookings (user_id, appointment_id) VALUES (?, ?)',
+                        [user.id, appointmentId],
                         (err) => {
                           if (err) {
                             db.run('ROLLBACK');
                             return res.status(500).json({ error: err.message });
                           }
 
-                          // Create new booking
-                          db.run(
-                            'INSERT INTO bookings (user_id, appointment_id) VALUES (?, ?)',
-                            [user.id, appointmentId],
-                            (err) => {
-                              if (err) {
-                                db.run('ROLLBACK');
-                                return res.status(500).json({ error: err.message });
-                              }
-
-                              // Update new appointment booking count
-                              db.run(
-                                'UPDATE appointments SET current_bookings = current_bookings + 1 WHERE id = ?',
-                                [appointmentId],
-                                (err) => {
-                                  if (err) {
-                                    db.run('ROLLBACK');
-                                    return res.status(500).json({ error: err.message });
-                                  }
-
-                                  db.run('COMMIT', (err) => {
-                                    if (err) {
-                                      return res.status(500).json({ error: err.message });
-                                    }
-
-                                    // Log appointment history
-                                    logAppointmentHistory(user.id, appointmentId, 'rescheduled', `Rescheduled to appointment at ${appointment.place} on ${appointment.datetime}`);
-
-                                    // Send confirmation email
-                                    sendConfirmationEmail(email, name, appointment, homeAddress, phoneNumber);
-                                    res.json({ message: 'Appointment rescheduled successfully!' });
-                                  });
-                                }
-                              );
+                          db.run('COMMIT', (err) => {
+                            if (err) {
+                              return res.status(500).json({ error: err.message });
                             }
-                          );
+
+                            // Log appointment history
+                            logAppointmentHistory(user.id, appointmentId, 'rescheduled', `Rescheduled to appointment at ${appointment.place} on ${appointment.datetime}`);
+
+                            // Send confirmation email
+                            sendConfirmationEmail(email, name, appointment, homeAddress, phoneNumber);
+                            res.json({ message: 'Appointment rescheduled successfully!' });
+                          });
                         }
                       );
                     }

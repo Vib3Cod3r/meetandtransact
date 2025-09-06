@@ -54,11 +54,26 @@
   border-radius: 8px;
   padding: 1.5rem;
   transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  position: relative;
 }
 
 .appointment-card:hover {
-  background: #f1f5f9;
-  border-color: #1e403a;
+  background: #f0fdf4;
+  border-color: #10b981;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);
+}
+
+.appointment-card.selected {
+  background: #ecfdf5;
+  border-color: #10b981;
+  border-width: 2px;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);
+}
+
+.appointment-card.selected:hover {
+  background: #d1fae5;
   transform: translateY(-1px);
 }
 
@@ -80,6 +95,16 @@
   font-size: 0.875rem;
   font-weight: 500;
   margin: 0;
+}
+
+.appointment-selected {
+  color: #10b981;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .no-appointments {

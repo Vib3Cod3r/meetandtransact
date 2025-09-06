@@ -298,6 +298,19 @@ const BookingPage: React.FC = () => {
     navigate('/');
   };
 
+  const handleAppointmentClick = (appointmentId: number) => {
+    setFormData(prev => ({
+      ...prev,
+      appointmentId: appointmentId.toString()
+    }));
+    
+    // Scroll to the form section
+    const formSection = document.querySelector('.booking-form-section');
+    if (formSection) {
+      formSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const formatDateTime = (datetime: string) => {
     return formatDateTimeForUK(datetime);
   };
@@ -455,13 +468,20 @@ const BookingPage: React.FC = () => {
               ) : (
                 <div className="appointments-list">
                   {appointments.map((appointment) => (
-                    <div key={appointment.id} className="appointment-card">
+                    <div 
+                      key={appointment.id} 
+                      className={`appointment-card ${formData.appointmentId === appointment.id.toString() ? 'selected' : ''}`}
+                      onClick={() => handleAppointmentClick(appointment.id)}
+                    >
                       <div className="appointment-info">
                         <h3>{appointment.place}</h3>
                         <p className="appointment-datetime">{formatDateTime(appointment.datetime)}</p>
                         <p className="appointment-slots">
                           {appointment.available_slots} slot{appointment.available_slots !== 1 ? 's' : ''} available
                         </p>
+                        {formData.appointmentId === appointment.id.toString() && (
+                          <p className="appointment-selected">✓ Selected</p>
+                        )}
                       </div>
                     </div>
                   ))}

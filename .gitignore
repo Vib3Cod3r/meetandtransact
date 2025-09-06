@@ -20,3 +20,5 @@ backend/dist
 reedi_database_dump.sql
 database.sqlite
 gardens.tb2
+.env.mailersend
+gardens

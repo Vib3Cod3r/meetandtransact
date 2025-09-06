@@ -105,8 +105,8 @@ router.get('/config', verifyAdmin, (req, res) => {
 router.get('/appointments', verifyAdmin, (req, res) => {
   const query = `
     SELECT a.*, 
-           COUNT(b.id) as current_bookings,
-           GROUP_CONCAT(u.name || ' (' || u.email || ')', ', ') as booked_users
+           COUNT(CASE WHEN a.status = 'active' THEN b.id END) as current_bookings,
+           GROUP_CONCAT(CASE WHEN a.status = 'active' THEN u.name || ' (' || u.email || ')' END, ', ') as booked_users
     FROM appointments a
     LEFT JOIN bookings b ON a.id = b.appointment_id
     LEFT JOIN users u ON b.user_id = u.id
@@ -147,7 +147,7 @@ router.get('/appointments/:id', verifyAdmin, (req, res) => {
     FROM appointments a
     LEFT JOIN bookings b ON a.id = b.appointment_id
     LEFT JOIN users u ON b.user_id = u.id
-    WHERE a.id = ?
+    WHERE a.id = ? AND a.status = 'active'
     ORDER BY b.booking_date ASC
   `;
   
@@ -226,7 +226,7 @@ router.put('/appointments/:id', verifyAdmin, (req, res) => {
   
   // First check if appointment has attendees
   db.get(
-    'SELECT COUNT(b.id) as current_bookings FROM appointments a LEFT JOIN bookings b ON a.id = b.appointment_id WHERE a.id = ? GROUP BY a.id',
+    'SELECT COUNT(b.id) as current_bookings FROM appointments a LEFT JOIN bookings b ON a.id = b.appointment_id WHERE a.id = ? AND a.status = "active" GROUP BY a.id',
     [id],
     (err, row) => {
       if (err) {
@@ -364,9 +364,9 @@ router.post('/appointments/:id/cancel', verifyAdmin, (req, res) => {
       const appointment = rows[0];
       const attendees = rows.filter(row => row.email);
       
-      // Update appointment status to cancelled
+      // Update appointment status to cancelled and reset current_bookings to 0
       db.run(
-        'UPDATE appointments SET status = ? WHERE id = ?',
+        'UPDATE appointments SET status = ?, current_bookings = 0 WHERE id = ?',
         ['cancelled', id],
         (err) => {
           if (err) {
