@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const nodemailer = require('nodemailer');
+const { sendSystemEmail } = require('../utils/maildetails');
 const { toUTC, fromUTC, formatForLocale, localDateTimeToUTC, utcToLocalDateTime } = require('../utils/timezone');
 
 // Get all available appointments
@@ -54,11 +55,13 @@ router.post('/book', async (req, res) => {
       }
 
       if (!verification) {
+        console.log('Email verification required:', email);
         return res.status(400).json({ 
           error: 'Email verification required. Please verify your email address first.',
           requiresVerification: true
         });
       }
+      console.log('Email verified:', email);
 
       // Proceed with booking if email is verified
       try {
@@ -101,7 +104,7 @@ router.post('/book', async (req, res) => {
                   let userId;
                   if (existingUser) {
                     userId = existingUser.id;
-                    
+                    console.log("User already exists: ", existingUser);
                     // Check if user already has a key (ineligible for new appointments)
                     db.get(
                       'SELECT key_serial_number FROM users WHERE id = ?',
@@ -290,24 +293,12 @@ END:VCALENDAR`;
 
 // Send confirmation email
 function sendConfirmationEmail(email, name, appointment, homeAddress, phoneNumber) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
+  
 
   const rescheduleUrl = generateRescheduleUrl(email, name, homeAddress, phoneNumber);
   const calendarEvent = generateCalendarEvent(appointment, name, email);
-  
-  const mailOptions = {
-    from: process.env.FROM_EMAIL,
-    to: email,
-    subject: 'Queen Street Gardens - Key Pickup Appointment Confirmed',
-    html: `
+
+  return sendSystemEmail(email, 'Key Pickup Appointment Confirmed', `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1e403a;">Appointment Confirmed</h2>
         <p>Dear ${name},</p>
@@ -340,24 +331,18 @@ function sendConfirmationEmail(email, name, appointment, homeAddress, phoneNumbe
           Queen Street Gardens Management
         </p>
       </div>
-    `,
-    attachments: [
-      {
-        filename: 'appointment.ics',
-        content: calendarEvent,
-        contentType: 'text/calendar; charset=utf-8'
-      }
-    ]
-  };
-
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.log('Error sending email:', error);
-    } else {
-      console.log('Email sent:', info.response);
-    }
-  });
+    `, {
+          attachments: [
+            {
+              filename: 'appointment.ics',
+              content: calendarEvent,
+              contentType: 'text/calendar; charset=utf-8'
+            }
+          ]
+        }
+      );
 }
+
 
 // Reschedule an appointment
 router.post('/reschedule', async (req, res) => {

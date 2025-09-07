@@ -3,8 +3,9 @@ const router = express.Router();
 const db = require('../database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { toUTC, fromUTC, formatForLocale, localDateTimeToUTC, utcToLocalDateTime } = require('../utils/timezone');
 
+const { toUTC, fromUTC, formatForLocale, localDateTimeToUTC, utcToLocalDateTime } = require('../utils/timezone');
+const { sendSystemEmail } = require('../utils/maildetails');
 // Admin login
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
@@ -143,11 +144,17 @@ router.get('/appointments/:id', verifyAdmin, (req, res) => {
            u.home_address,
            u.phone_number,
            u.key_serial_number,
-           b.booking_date
+           b.booking_date,
+           booking_counts.actual_current_bookings
     FROM appointments a
     LEFT JOIN bookings b ON a.id = b.appointment_id
     LEFT JOIN users u ON b.user_id = u.id
-    WHERE a.id = ? AND a.status = 'active'
+    LEFT JOIN (
+      SELECT appointment_id, COUNT(*) as actual_current_bookings
+      FROM bookings
+      GROUP BY appointment_id
+    ) booking_counts ON a.id = booking_counts.appointment_id
+    WHERE a.id = ?
     ORDER BY b.booking_date ASC
   `;
   
@@ -166,7 +173,7 @@ router.get('/appointments/:id', verifyAdmin, (req, res) => {
       place: rows[0].place,
       datetime: fromUTC(rows[0].datetime),
       max_bookings: rows[0].max_bookings,
-      current_bookings: rows[0].current_bookings,
+      current_bookings: rows[0].actual_current_bookings || 0,
       status: rows[0].status,
       created_at: fromUTC(rows[0].created_at),
       attendees: rows.filter(row => row.user_id).map(row => ({
@@ -453,8 +460,8 @@ router.delete('/appointments/:id', verifyAdmin, (req, res) => {
 router.get('/users', verifyAdmin, (req, res) => {
   const query = `
     SELECT u.*, 
-           COUNT(b.id) as total_bookings,
-           GROUP_CONCAT(a.place || ' (' || a.datetime || ')', ', ') as appointments
+           COUNT(CASE WHEN a.status = 'active' THEN b.id END) as total_bookings,
+           GROUP_CONCAT(CASE WHEN a.status = 'active' THEN a.place || ' (' || a.datetime || ')' END, ', ') as appointments
     FROM users u
     LEFT JOIN bookings b ON u.id = b.user_id
     LEFT JOIN appointments a ON b.appointment_id = a.id
@@ -527,23 +534,7 @@ function logAppointmentHistory(userId, appointmentId, action, details = null) {
 
 // Email functions
 function sendReminderEmail(email, name, appointment) {
-  const nodemailer = require('nodemailer');
-  
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-
-  const mailOptions = {
-    from: process.env.FROM_EMAIL,
-    to: email,
-    subject: 'Queen Street Gardens - Appointment Reminder',
-    html: `
+  return sendSystemEmail(email, 'Appointment Reminder', `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1e403a;">Appointment Reminder</h2>
         <p>Dear ${name},</p>
@@ -562,24 +553,10 @@ function sendReminderEmail(email, name, appointment) {
           Queen Street Gardens Management
         </p>
       </div>
-    `
+    `);
   };
-
-  return transporter.sendMail(mailOptions);
-}
-
 function sendCancellationEmail(email, name, appointment, attendee) {
-  const nodemailer = require('nodemailer');
-  
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
+
 
   // Create rescheduling link with pre-filled data
   const rescheduleData = encodeURIComponent(JSON.stringify({
@@ -591,11 +568,8 @@ function sendCancellationEmail(email, name, appointment, attendee) {
   
   const rescheduleUrl = `${process.env.SERVICE_HOST || 'http://localhost:3000'}/reschedule?data=${rescheduleData}`;
 
-  const mailOptions = {
-    from: process.env.FROM_EMAIL,
-    to: email,
-    subject: 'Queen Street Gardens - Appointment Cancelled - Please Reschedule',
-    html: `
+
+  return sendSystemEmail(email, 'Appointment Cancelled - Please Reschedule', `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #dc2626;">Appointment Cancelled</h2>
         <p>Dear ${name},</p>
@@ -623,12 +597,8 @@ function sendCancellationEmail(email, name, appointment, attendee) {
           Queen Street Gardens Management
         </p>
       </div>
-    `
+    `);
   };
-
-  return transporter.sendMail(mailOptions);
-}
-
 // Issue key to user
 router.post('/users/:id/issue-key', verifyAdmin, (req, res) => {
   const { id } = req.params;

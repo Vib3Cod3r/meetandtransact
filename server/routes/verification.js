@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const nodemailer = require('nodemailer');
+const { sendSystemEmail } = require('../utils/maildetails');
 
 // Generate a 6-digit verification code
 function generateVerificationCode() {
@@ -10,22 +11,8 @@ function generateVerificationCode() {
 
 // Send verification email
 function sendVerificationEmail(email, code) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
 
-  const mailOptions = {
-    from: "Queen Street Gardens <" + process.env.FROM_EMAIL + ">",
-    replyTo: process.env.REPLY_TO_EMAIL || process.env.FROM_EMAIL,
-    to: email,
-    subject: 'Queen Street Gardens - Email Verification Code',
-    html: `
+  return sendSystemEmail(email, 'Email Verification Code', `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1e40af;">Email Verification Required</h2>
         <p>Thank you for requesting an appointment at Queen Street Gardens. To complete your booking, please verify your email address using the code below:</p>
@@ -41,11 +28,8 @@ function sendVerificationEmail(email, code) {
           Queen Street Gardens Management
         </p>
       </div>
-    `
+    `);
   };
-
-  return transporter.sendMail(mailOptions);
-}
 
 // Request verification code
 const last_request_time = {}; // email -> timestamp

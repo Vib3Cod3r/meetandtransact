@@ -478,7 +478,7 @@ const AdminDashboard: React.FC = () => {
                             <p className="user-phone">Phone: {user.phone_number}</p>
                           )}
                           <p className="user-bookings">
-                            Total bookings: {user.total_bookings}
+                            Active bookings: {user.total_bookings}
                           </p>
                           <p className="user-key-status">
                             <strong>Key Status:</strong> 
@@ -486,9 +486,13 @@ const AdminDashboard: React.FC = () => {
                               {user.key_serial_number ? `Serial: ${user.key_serial_number}` : 'No key issued'}
                             </span>
                           </p>
-                          {user.appointments && (
+                          {user.appointments ? (
                             <p className="user-appointments">
-                              <strong>Appointments:</strong> {user.appointments}
+                              <strong>Current Appointment:</strong> {user.appointments}
+                            </p>
+                          ) : (
+                            <p className="user-no-appointments">
+                              <strong>Status:</strong> <span className="no-appointment">No active appointment</span>
                             </p>
                           )}
                         </div>

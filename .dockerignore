@@ -9,3 +9,4 @@ README.md
 Dockerfile
 .dockerignore
 
+server/data

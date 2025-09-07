@@ -251,6 +251,18 @@
   margin: 0;
 }
 
+.user-no-appointments {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.no-appointment {
+  color: #dc2626;
+  font-weight: 600;
+  font-style: italic;
+}
+
 .user-address {
   color: #6b7280;
   font-size: 0.875rem;

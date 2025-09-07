@@ -80,7 +80,7 @@ export function localDateTimeToUTC(localDateTime: string): string {
   if (!localDateTime) return '';
   
   // Create a date object and treat it as UK time
-  const date = new Date(localDateTime+'+01:00');
+  const date = new Date(localDateTime);
   
   // Use a more direct approach: create a date that represents the UK time
   // and then convert it to UTC by adjusting for the timezone offset

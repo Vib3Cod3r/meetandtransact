@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { formatDateTimeForUK, formatDateTimeShort } from '../utils/timezone';
 import KeyManagementModal from './KeyManagementModal';
+import CancellationSuccessModal from './CancellationSuccessModal';
 import './AppointmentDetail.css';
 
 interface Attendee {
@@ -50,6 +51,12 @@ const AppointmentDetail: React.FC = () => {
   const [selectedUserForKey, setSelectedUserForKey] = useState<Attendee | null>(null);
   const [userHistory, setUserHistory] = useState<AppointmentHistory[]>([]);
   const [selectedUserForHistory, setSelectedUserForHistory] = useState<Attendee | null>(null);
+  const [showCancellationSuccess, setShowCancellationSuccess] = useState(false);
+  const [cancelledAppointmentDetails, setCancelledAppointmentDetails] = useState<{
+    place: string;
+    datetime: string;
+    attendeeCount: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchAppointmentDetails();
@@ -110,9 +117,14 @@ const AppointmentDetail: React.FC = () => {
       await axios.post(`/api/admin/appointments/${id}/cancel`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMessage({ type: 'success', text: 'Appointment cancelled and rescheduling emails sent!' });
-      // Refresh the appointment details
-      fetchAppointmentDetails();
+      
+      // Show success modal with appointment details
+      setCancelledAppointmentDetails({
+        place: appointment.place,
+        datetime: formatDateTime(appointment.datetime),
+        attendeeCount: appointment.attendees.length
+      });
+      setShowCancellationSuccess(true);
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to cancel appointment.';
       setMessage({ type: 'error', text: errorMessage });
@@ -171,6 +183,12 @@ const AppointmentDetail: React.FC = () => {
   const handleCloseKeyManagement = () => {
     setShowKeyManagement(false);
     setSelectedUserForKey(null);
+  };
+
+  const handleCancellationSuccessClose = () => {
+    setShowCancellationSuccess(false);
+    setCancelledAppointmentDetails(null);
+    navigate('/admin/dashboard');
   };
 
   if (loading) {
@@ -364,6 +382,15 @@ const AppointmentDetail: React.FC = () => {
             onClose={handleCloseKeyManagement}
             onKeyIssued={handleKeyIssued}
             onKeyRevoked={handleKeyRevoked}
+          />
+        )}
+
+        {/* Cancellation Success Modal */}
+        {cancelledAppointmentDetails && (
+          <CancellationSuccessModal
+            isOpen={showCancellationSuccess}
+            onClose={handleCancellationSuccessClose}
+            appointmentDetails={cancelledAppointmentDetails}
           />
         )}
       </div>

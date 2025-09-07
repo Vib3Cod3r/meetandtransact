@@ -22,3 +22,4 @@ database.sqlite
 gardens.tb2
 .env.mailersend
 gardens
+.env.hostgator
