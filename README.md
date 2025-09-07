@@ -1,3 +1,9 @@
+# Project Vibe - Note From Guide
+
+This app (including all documentation including this README) was over 98% (by lines of code) coded by Claude Sonnet with direction from me in a couple of sessions totalling no more than 6 hours.
+
+Claude needed my help mainly in some of the logic around timezone logic (the database, the user and the target timezone were all different, and Claude is not great at maths) and I also contributed the sendSystemEmail() function to stop Claude repeating himself (as he is prone to do).
+
 # Queen Street Gardens - Key Pickup Appointment System
 
 A web application that allows residents to book appointments for picking up their Queen Street Gardens keys. The system includes both a public booking interface and an admin dashboard for managing appointments.
